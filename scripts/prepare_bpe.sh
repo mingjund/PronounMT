@@ -1,18 +1,18 @@
 # Prepare BPE
-python3 src/subwords.py train \
---model_prefix OpenSubtitles/en-ko/data/subwords \
+python subwords.py train \
+--model_prefix JESC/pialign/subwords \
 --vocab_size 8000 \
 --model_type bpe \
---input OpenSubtitles/en-ko/data/train.en,OpenSubtitles/en-ko/data/train.ko
+--input JESC/pialign/train.en,JESC/pialign/train.ja
 
 # Apply BPE
 for split in train dev test
 do
-    for l in ko en
+    for l in ja en
     do
-        python3 src/subwords.py segment \
-        --model OpenSubtitles/en-ko/data/subwords.model \
-        < OpenSubtitles/en-ko/data/$split.$l \
-        > OpenSubtitles/en-ko/data/$split.bpe.$l
+        python subwords.py segment \
+        --model JESC/pialign/subwords.model \
+        < JESC/pialign/$split.$l \
+        > JESC/pialign/$split.bpe.$l
     done
 done
