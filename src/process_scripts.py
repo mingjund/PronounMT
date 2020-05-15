@@ -5,6 +5,7 @@ import mojimoji
 import jaconv
 import pysrt
 import pysubs2
+import nltk
 from tqdm import tqdm
 from collections import Counter
 
@@ -16,19 +17,19 @@ conv = kakasi.getConverter()
 
 
 class Drama:
-    def __init__(self, name, ep_delimiter, scene_delimiter, sub_style, drama_len, window, bi_thres, uni_thres):
+    def __init__(self, name, ep_delimiter, scene_delimiter, sub_style, drama_len, window, tri_thres, bi_thres):
         self.name = name
         self.ep_delimiter = ep_delimiter
         self.scene_delimiter = scene_delimiter
         self.sub_style = sub_style
         self.drama_len = drama_len
         self.window = window
+        self.tri_thres = tri_thres
         self.bi_thres = bi_thres
-        self.uni_thres = uni_thres
 
 
 def load_script(drama):
-    path = '../subs/{name}/{name}-script.txt'.format(name=drama.name)
+    path = '../../subs/{name}/{name}-script.txt'.format(name=drama.name)
     with open(path, 'r') as f:
         script_by_ep = re.split('(?=\n\n\n\n\n{}\n\n\n\n\n\n)'.format(drama.ep_delimiter), f.read())[1:]
 
@@ -106,88 +107,143 @@ def normalize_ja(text):
     text = conv.do(text)
     text = jaconv.normalize(text)
     text = re.sub(r'[.…｡。!！、\u3000　 ]|\\N|[\（\(].*?[\）\)]', '', text)
+    if len(text) < 3:
+        text = ' '+text+' '
     return text
 
 
-def get_bigrams(text):
-    text = normalize_ja(text)
-    bigrams = []
-    if len(text) > 0:
-        bigrams.append(' '+text[0])
-        for i in range(len(text)):
-            bigrams.append(text[i:i+2])
-        bigrams[-1] = bigrams[-1]+' '
-    return dict(Counter(bigrams)), len(bigrams)
+def get_ngrams(text, n):
+    ngrams = list(nltk.ngrams(text, n))
+    return dict(Counter(ngrams)), len(ngrams)
 
 
-def get_unigrams(text):
-    unigrams = normalize_ja(text)
-    return dict(Counter(unigrams)), len(unigrams)
-
-
-def search_window(sub, episode, prev_turn_no, unmatched, search_range, bi_thres, uni_thres):
+def search_window(sub, episode, prev_turn_no, jump, unmatched, search_range, tri_thres, bi_thres):
     best_count = 0
     best_turn = ('', '')
     turn_no = None
-    sub_bigrams, sub_bigrams_len = get_bigrams(sub)
-    sub_unigrams, sub_unigrams_len = get_unigrams(sub)
+    sub_text = normalize_ja(sub)
+    #sub_trigrams, sub_trigrams_len = get_ngrams(sub_text, 3)
+    sub_trigrams, sub_trigrams_len = get_ngrams(sub_text, 3)
+    sub_bigrams, sub_bigrams_len = get_ngrams(sub_text, 2)
 
-    if sub_unigrams_len == 0:
+    if sub_trigrams_len == 0:
         unmatched += 1
     else:
         for i in range(*search_range):
             scene = episode[i]
             for j in range(len(scene[1])):
                 turn = scene[1][j]
-                script_bigrams, script_bigrams_len = get_bigrams(turn[1])
-                bi_count = 0
-                for bigram in sub_bigrams:
-                    bi_count += min(sub_bigrams[bigram], script_bigrams.get(bigram, 0))
-                if bi_count > best_count:
-                    best_count = bi_count
+                script_text = normalize_ja(turn[1])
+                script_trigrams, script_trigrams_len = get_ngrams(script_text, 3)
+                tri_count = 0
+                for trigram in sub_trigrams:
+                    tri_count += min(sub_trigrams[trigram], script_trigrams.get(trigram, 0))
+                if tri_count > best_count:
+                    best_count = tri_count
                     best_turn = turn
                     turn_no = (i,j)
-        if best_count/sub_bigrams_len < bi_thres:
-            #print('bi', best_count/sub_bigrams_len, sub + ' | '+ best_turn[1])
-            unmatched += 1
-            best_turn = ('', '')
-            turn_no = None
-        else:
-            uni_count = 0
-            script_unigrams, _ = get_unigrams(best_turn[1])
-            for unigram in sub_unigrams:
-                uni_count += min(sub_unigrams[unigram], script_unigrams.get(unigram, 0))
-            if uni_count/sub_unigrams_len < uni_thres:
-                #print('uni', uni_count/sub_unigrams_len, sub + ' | '+ best_turn[1])
+        if best_count/sub_trigrams_len < tri_thres:
+            # print('bi', best_count/sub_trigrams_len, sub + ' | '+ best_turn[1])
+            # unmatched += 1
+            # best_turn = ('', '')
+            # turn_no = None
+        #else:
+            bi_count = 0
+            script_bigrams, _ = get_ngrams(normalize_ja(best_turn[1]), 2)
+            for bigram in sub_bigrams:
+                bi_count += min(sub_bigrams[bigram], script_bigrams.get(bigram, 0))
+            if bi_count/sub_bigrams_len < bi_thres:
+                #print('uni', bi_count/sub_bigrams_len, sub + ' | '+ best_turn[1])
                 unmatched += 1
                 best_turn = ('', '')
                 turn_no = None
+            #else:
+                #if turn_no[0] > prev_turn_no[0]:
+        if turn_no != None:
+            # if previously no jump, jump is allowed
+            if jump == 0:
+                jump = turn_no[0] - prev_turn_no[0]
+            # previously jumped and now must return
             else:
-                prev_turn_no = turn_no
-                #print('bi', best_count/sub_bigrams_len, sub + ' | '+ best_turn[1])
-                #print('uni', uni_count/sub_unigrams_len, sub + ' | '+ best_turn[1])
+                jump = 0
 
-    return turn_no, best_turn, prev_turn_no, unmatched
+            prev_turn_no = turn_no
+            # print('tri', best_count/sub_trigrams_len, sub + ' | '+ best_turn[1])
+            # if best_count/sub_trigrams_len < tri_thres:
+            #     print('bi', bi_count/sub_bigrams_len, sub + ' | '+ best_turn[1])
+
+    return turn_no, best_turn, prev_turn_no, jump, unmatched
 
 
-def align_utterances(ja_subs, en_subs, episode, window, bi_thres, uni_thres):
+def align_utterances(ja_subs, en_subs, episode, window, tri_thres, bi_thres):
     matched_script = []
     unmatched = 0
     prev_turn_no = (0, 0)
     script_len = len(episode)
+    sub_len = 0
+    jump = 0
     for ja_sub, en_sub in zip(ja_subs, en_subs):
         if len(ja_sub) > 0: 
-            search_range = (max(prev_turn_no[0]+window[0], 0), 
-                            min(prev_turn_no[0]+window[1]+1, script_len))
-            turn_no, best_turn, prev_turn_no, unmatched = \
-                search_window(ja_sub, episode, prev_turn_no, unmatched, search_range, bi_thres, uni_thres)
+            #print(jump)
+            search_range = (max(prev_turn_no[0]+window[0]-jump, 0), 
+                            min(prev_turn_no[0]+window[1]+1-jump, script_len))
+            #print(prev_turn_no[0], search_range)
+            turn_no, best_turn, prev_turn_no, jump, unmatched = \
+                search_window(ja_sub, episode, prev_turn_no, 0, unmatched, search_range, tri_thres, bi_thres)
             matched_script.append((turn_no, best_turn[0], best_turn[1], ja_sub, en_sub))
-        else:
-            matched_script.append((None, '', '', ja_sub, en_sub))
-    print('unmatched', unmatched/len(ja_subs))
+            #print((turn_no, best_turn[0], best_turn[1], ja_sub, en_sub))
+            sub_len += 1
+        # else:
+        #     matched_script.append((None, '', '', ja_sub, en_sub))
+    print('unmatched', unmatched/sub_len)
     # for i in matched_script:
     #     print(i)
-    return matched_script
+    return matched_script, sub_len
+
+
+def realign(matched_script, episode, tri_thres, bi_thres):
+    unmatched = 0
+    prev_turn_no = (0,0)
+    last_sub = len(matched_script) - 1
+    last_scene = len(episode) - 1
+
+    for i in range(len(matched_script)):
+        scene_no = None if matched_script[i][0] == None else matched_script[i][0][0]
+        prev_scene_no = 0
+        next_scene_no = last_scene
+
+        if i > 0:
+            k = 1
+            while matched_script[i-k][0] == None and i > k:
+                k += 1     
+            if matched_script[i-k][0] != None:   
+                prev_scene_no = matched_script[i-k][0][0]
+
+        if i < last_sub:
+            l = 1
+            while i+l < last_sub and (matched_script[i+l][0] == None or \
+                matched_script[i+l][0][0] < prev_scene_no):
+                l += 1
+            if matched_script[i+l][0] != None:
+                next_scene_no = matched_script[i+l][0][0]
+        #print(prev_scene_no, scene_no, next_scene_no)
+        if scene_no == None or scene_no < prev_scene_no or scene_no > next_scene_no: 
+            ja_sub = matched_script[i][3]
+            search_range = prev_scene_no, next_scene_no+1
+            turn_no, best_turn, prev_turn_no, _, _ = \
+                search_window(ja_sub, episode, prev_turn_no, 0, 0, search_range, tri_thres, bi_thres)
+            #print('prev', matched_script[i])
+            if turn_no != None:
+                matched_script[i] = (turn_no, best_turn[0], best_turn[1], ja_sub, matched_script[i][4])
+            # else:
+            #     matched_script[i] = (None, '', '', ja_sub, matched_script[i][4])
+            #print('curr', matched_script[i])
+
+        #print(matched_script[i])
+        unmatched += 1 if matched_script[i][0] == None else 0
+        
+    print('realigned unmatched:', unmatched/(last_sub+1))
+    return matched_script, unmatched
 
 
 def alignbybleu(subs, episode, window, bleu_thres):
@@ -219,46 +275,6 @@ def alignbybleu(subs, episode, window, bleu_thres):
 
     print('unmatched', unmatched/len(subs))
     return matched_script
-
-
-def realign(matched_script, episode, bi_thres, uni_thres):
-    unmatched = 0
-    prev_turn_no = (0,0)
-    last_sub = len(matched_script) - 1
-    last_scene = len(episode) - 1
-    for i in range(len(matched_script)):
-        scene_no = None if matched_script[i][0] == None else matched_script[i][0][0]
-        prev_scene_no = 0
-        next_scene_no = last_scene
-        if i > 0:
-            k = 1
-            while matched_script[i-k][0] == None and i >= k:
-                k += 1     
-            if matched_script[i-k][0] != None:   
-                prev_scene_no = matched_script[i-k][0][0]
-
-        if i < last_sub:
-            l = 1
-            while i+l < last_sub and (matched_script[i+l][0] == None or matched_script[i+l][0][0] < prev_scene_no):
-                l += 1
-            if matched_script[i+l][0] != None:
-                next_scene_no = matched_script[i+l][0][0]
-        #print(prev_scene_no, scene_no, next_scene_no)
-        if scene_no == None or scene_no < prev_scene_no or scene_no > next_scene_no: 
-            ja_sub = matched_script[i][3]
-            search_range = prev_scene_no, next_scene_no+1
-            turn_no, best_turn, prev_turn_no, _ = \
-                search_window(ja_sub, episode, prev_turn_no, 0, search_range, bi_thres, uni_thres)
-            #print('prev', matched_script[i])
-            if turn_no != None:
-                matched_script[i] = (turn_no, best_turn[0], best_turn[1], ja_sub, matched_script[i][4])
-            # else:
-            #     matched_script[i] = (None, '', '', ja_sub, matched_script[i][4])
-            #print('curr', matched_script[i])
-        #print(matched_script[i])
-        unmatched += 1 if matched_script[i][0] == None else 0
-    print('realigned unmatched:', unmatched/(last_sub+1))
-    return matched_script, unmatched
 
 
 def process_spt(spt_path):
@@ -318,33 +334,40 @@ def extract_speaker(line):
 #%%   
 if __name__ == '__main__':
 
-    Amachan = Drama('Amachan', '第.*回', '■', ['Aki JP'], 156, (-3,3), 0.12, 0.26)
-    Yutori = Drama('Yutori', '１　.*' , '\n\n\n\n\n[０-９0-9]*　.*\n\n\n\n\n\n', ['Subtitle', 'Default'], 10, (-10,10), 0.3, 0.4)
-    Nigehaji = Drama('Nigehaji', '１　.*' , '\n\n\n\n\n[０-９0-9]*　.*\n\n\n\n\n\n', ['Default'], 11, (-10,10), 0.3, 0.4)
+    Amachan = Drama('Amachan', '第.*回', '■', ['Aki JP'], 156, (-10,10), 0.4, 0.5)
+    Yutori = Drama('Yutori', '１　.*' , '\n\n\n\n\n[０-９0-9]*　.*\n\n\n\n\n\n', ['Subtitle', 'Default'], 10, (-30,30), 0.4, 0.5)
+    Nigehaji = Drama('Nigehaji', '１　.*' , '\n\n\n\n\n[０-９0-9]*　.*\n\n\n\n\n\n', ['Default'], 11, (-30,30), 0.4, 0.5)
     drama = Yutori
     
+    total_unmatched = 0
+    total_subs = 0
 
-    for drama in [Amachan, Yutori, Nigehaji]:
+    for drama in [Nigehaji]:
         print('Aligning', drama.name)
         script = load_script(drama)
         unmatched_subs = 0 
         sub_count = 0
         
         for ep in tqdm(range(drama.drama_len)):
-            ja_sub_path = '../subs/{name}/en-ja_alignment/ja_subs/{name}_aligned_{ep:0>3d}.ja'.format(name=drama.name, ep=ep+1)
-            en_sub_path = '../subs/{name}/en-ja_alignment/en_subs/{name}_aligned_{ep:0>3d}.en'.format(name=drama.name, ep=ep+1)
+            ja_sub_path = '../../subs/{name}/en-ja_alignment/ja_subs/{name}_aligned_{ep:0>3d}.ja'.format(name=drama.name, ep=ep+1)
+            en_sub_path = '../../subs/{name}/en-ja_alignment/en_subs/{name}_aligned_{ep:0>3d}.en'.format(name=drama.name, ep=ep+1)
             ja_subs = load_subs(ja_sub_path)
             en_subs = load_subs(en_sub_path)
             assert(len(ja_subs) == len(en_subs))
-            sub_count += len(ja_subs)
             episode = script[ep]
-            matched_script = align_utterances(ja_subs, en_subs, episode, drama.window, drama.bi_thres, drama.uni_thres)
-            unmatched_subs += realign(matched_script, episode, drama.bi_thres, drama.uni_thres)[1]
+            matched_script, sub_len = align_utterances(ja_subs, en_subs, episode, drama.window, drama.tri_thres, drama.bi_thres)
+            sub_count += sub_len
+            unmatched_subs += realign(matched_script, episode, drama.tri_thres, drama.bi_thres)[1]
 
-            with open('../subs/{}/script-sub_alignment/{:03d}_speaker-alignment.txt'.format(drama.name, ep+1), 'w') as f:
+            with open('../../subs/{}/script-sub_alignment/{:03d}_speaker-alignment.txt'.format(drama.name, ep+1), 'w') as f:
                 f.write('\n'.join(' | '.join([str(line[0])]+list(line[1:])) for line in matched_script))
 
-#%%
-    print(sub_count)
-    print('total unmatch rate:', unmatched_subs/sub_count)
+#%%     
+        print(sub_count)
+        print(drama.name, 'unmatch rate:', unmatched_subs/sub_count)
 
+        total_unmatched += unmatched_subs
+        total_subs += sub_count
+
+    print(sub_count)
+    print('total unmatch rate:', total_unmatched/total_subs)

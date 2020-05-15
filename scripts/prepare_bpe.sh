@@ -1,18 +1,18 @@
 # Prepare BPE
-python subwords.py train \
---model_prefix JESC/pialign/subwords \
---vocab_size 8000 \
+python3 /home/mingjund/PronounMT/code/src/subwords.py train \
+--model_prefix $1/subwords \
+--vocab_size $4 \
 --model_type bpe \
---input JESC/pialign/train.en,JESC/pialign/train.ja
+--input $1/train.$2,$1/train.$3
 
 # Apply BPE
 for split in train dev test
 do
-    for l in ja en
+    for l in $2 $3
     do
-        python subwords.py segment \
-        --model JESC/pialign/subwords.model \
-        < JESC/pialign/$split.$l \
-        > JESC/pialign/$split.bpe.$l
+        python3 /home/mingjund/PronounMT/code/src/subwords.py segment \
+        --model $1/subwords.model \
+        < $1/$split.$l \
+        > $1/$split.bpe.$l
     done
 done
