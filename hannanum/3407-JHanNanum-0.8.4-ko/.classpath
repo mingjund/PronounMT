@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="src" path="JHanNanum/src"/>
+	<classpathentry kind="lib" path="GUIDemo/jhannanum.jar"/>
+	<classpathentry kind="lib" path="jhannanum.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

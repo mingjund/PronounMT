@@ -31,11 +31,11 @@ def spk2turn(speakers, docs):
             turns.append('[new]')
         elif speakers[i] == 'UNK_SPK' or speakers[i-1] == 'UNK_SPK':
             turns.append('[unk]')
-        elif speakers[i] != speakers[i-1]:
+        elif speakers[i] == speakers[i-1]:
             turns.append('[cont]')
         else:
             turns.append('[new]')
-    
+
     return turns
 
 
@@ -75,6 +75,7 @@ def write_corpus(outpath, split, speakers, ja_sents, en_sents, doc_boundaries):
         ja_f.write('\n'.join(ja_sents))
         en_f.write('\n'.join(en_sents))
         doc_f.write('\n'.join(['0']+doc_boundaries[:-1]))
+
     print('Generated {} set files!'.format(split))
 
 
