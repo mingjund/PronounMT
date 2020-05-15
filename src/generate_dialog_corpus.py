@@ -28,13 +28,13 @@ def spk2turn(speakers, docs):
 
     for i in range(len(speakers)):
         if i == 0 or i in docs:
-            turns.append('<new>')
+            turns.append('[new]')
         elif speakers[i] == 'UNK_SPK' or speakers[i-1] == 'UNK_SPK':
-            turns.append('<unk_turn>')
+            turns.append('[unk]')
         elif speakers[i] != speakers[i-1]:
-            turns.append('<continued>')
+            turns.append('[cont]')
         else:
-            turns.append('<new>')
+            turns.append('[new]')
     
     return turns
 
@@ -60,16 +60,21 @@ def write_corpus(outpath, split, speakers, ja_sents, en_sents, doc_boundaries):
         int(doc_boundaries[-1]) == len(speakers))    
     print('All {} set parts aligned!'.format(split))
 
+    turns = spk2turn(speakers, doc_boundaries)
+    turn_ja = [turn+' '+ja for turn, ja in list(zip(turns,ja_sents))]
+
     with open(outpath+split+'.spk', 'w', encoding='utf-8') as spk_f, \
         open(outpath+split+'.turn', 'w', encoding='utf-8') as turn_f, \
+        open(outpath+split+'.turn_ja', 'w', encoding='utf-8') as turn_ja_f, \
         open(outpath+split+'.ja', 'w', encoding='utf-8') as ja_f, \
         open(outpath+split+'.en', 'w', encoding='utf-8') as en_f, \
         open(outpath+split+'.docs', 'w', encoding='utf-8') as doc_f:
         spk_f.write('\n'.join(speakers))
-        turn_f.write('\n'.join(spk2turn(speakers, doc_boundaries)))
+        turn_f.write('\n'.join(turns))
+        turn_ja_f.write('\n'.join(turn_ja))
         ja_f.write('\n'.join(ja_sents))
         en_f.write('\n'.join(en_sents))
-        doc_f.write('\n'.join(doc_boundaries))
+        doc_f.write('\n'.join(['0']+doc_boundaries[:-1]))
     print('Generated {} set files!'.format(split))
 
 
@@ -154,14 +159,14 @@ for filename in os.listdir(clean_path):
             train_doc_boundaries.append(str(len(train_speakers)))
             all_doc_boundaries.append(str(len(all_speakers)))
 
-all_data = False
+all_data = True
 if all_data:
     directory = '../../opensubs/en-ja_all/'
-    outpath = '../../dialog_corpus/en-ja_all/data/'
+    outpath = '../../dialog_corpus/en-ja_all/data_new/'
     for filename in os.listdir(directory):
         if filename.endswith(".en") and (filename.replace('.en', '-alignment.txt-t') not in set(os.listdir(clean_path))):
             with open(directory+filename, 'r') as src_f, open(directory+filename.replace('.en', '.ja'), 'r') as tgt_f:
-                src_text = [line.strip() for line in src_f.read().strip().split('\n')]
+                src_text = [detokenize(line.strip()) for line in src_f.read().strip().split('\n')]
                 tgt_text = [line.strip() for line in tgt_f.read().strip().split('\n')]
 
                 train_en_sents += src_text

@@ -206,10 +206,12 @@ def realign(matched_script, episode, tri_thres, bi_thres):
     prev_turn_no = (0,0)
     last_sub = len(matched_script) - 1
     last_scene = len(episode) - 1
+
     for i in range(len(matched_script)):
         scene_no = None if matched_script[i][0] == None else matched_script[i][0][0]
         prev_scene_no = 0
         next_scene_no = last_scene
+
         if i > 0:
             k = 1
             while matched_script[i-k][0] == None and i > k:
@@ -219,7 +221,8 @@ def realign(matched_script, episode, tri_thres, bi_thres):
 
         if i < last_sub:
             l = 1
-            while i+l < last_sub and (matched_script[i+l][0] == None or matched_script[i+l][0][0] < prev_scene_no):
+            while i+l < last_sub and (matched_script[i+l][0] == None or \
+                matched_script[i+l][0][0] < prev_scene_no):
                 l += 1
             if matched_script[i+l][0] != None:
                 next_scene_no = matched_script[i+l][0][0]
@@ -235,8 +238,10 @@ def realign(matched_script, episode, tri_thres, bi_thres):
             # else:
             #     matched_script[i] = (None, '', '', ja_sub, matched_script[i][4])
             #print('curr', matched_script[i])
+
         #print(matched_script[i])
         unmatched += 1 if matched_script[i][0] == None else 0
+        
     print('realigned unmatched:', unmatched/(last_sub+1))
     return matched_script, unmatched
 

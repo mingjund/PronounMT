@@ -1,3 +1,8 @@
+import spacy
+import sys
+
+nlp = spacy.load("en_core_web_sm")
+
 en_pro = {'i', 'my', 'me', 'mine', 'myself',
                 'we', 'us', 'our', 'ours', 'ourselves',
                 'you', 'your', 'yours', 'yourself', 'yourselves',
@@ -43,8 +48,33 @@ def filter(ja_file, en_file, en_file_untok, out_ja_file, out_en_file):
     with open(out_en_file, 'w') as f:
         f.write(''.join(filtered_en))
 
+
+def output_pronouns(readfile, outfile, single=False):
+    output = []
+
+    with open(readfile, 'r') as f:
+        text = f.readlines()
+        tokenized_text = []
+        for sent in nlp.pipe(text):
+            line_prons = []
+            for token in sent:
+                if token.text.lower() in en_pro:
+                    line_prons.append(token.text.lower())
+            if single:
+                if len(line_prons) > 0:
+                    output.append(line_prons[0])
+                else:
+                    output.append('error')
+            else:
+                output.append(' '.join(line_prons))
+
+    with open(outfile, 'w') as f:
+        f.write('\n'.join(output))
+
+
 if __name__ == "__main__":
-    for ja_file, en_file, en_file_untok, out in [('pialign/train.tok.ja','pialign/train.tok.en', 'pialign/train.en', 'train'),
-                             ('pialign/dev.tok.ja', 'pialign/dev.tok.en', 'pialign/dev.en', 'dev'),
-                             ('pialign/test.tok.ja', 'pialign/test.tok.en', 'pialign/test.en', 'test')]:
-        filter(ja_file, en_file, en_file_untok,'split/'+out+'.pron.tok.ja', 'split/'+out+'.pron.en')
+    # for ja_file, en_file, en_file_untok, out in [('pialign/train.tok.ja','pialign/train.tok.en', 'pialign/train.en', 'train'),
+    #                          ('pialign/dev.tok.ja', 'pialign/dev.tok.en', 'pialign/dev.en', 'dev'),
+    #                          ('pialign/test.tok.ja', 'pialign/test.tok.en', 'pialign/test.en', 'test')]:
+    #     filter(ja_file, en_file, en_file_untok,'split/'+out+'.pron.tok.ja', 'split/'+out+'.pron.en')
+    output_pronouns(sys.argv[1], sys.argv[2])
