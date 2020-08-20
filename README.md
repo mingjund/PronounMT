@@ -1,12 +1,12 @@
 # Improving Pronoun Translation for Prodrop Languages
 
 ## Script-Sub-Sub Alignment for Speaker Labeling
-This repo provides code for aligning subtitles of any two languages in the `.ass` format based on timestamps - **sub-sub alignment** and aligning scripts to subtitles for multiple episodes of TV series - **script-sub alignment**.
+This repo provides code for aligning subtitles of any two languages in the *.ass* format based on timestamps - **sub-sub alignment** and aligning scripts to subtitles for multiple episodes of TV series - **script-sub alignment**.
 
 Required Python libraries: `pysubs2`, `pykakasi`, `jaconv`, `nltk`.
 
 ### Sub-Sub Alignment
-ASS format subtitles of two different languages can be aligned based on timestamps using the command below. Successfully aligned subtitles will appear at the same line number in their respective output files.
+ASS format subtitles of any two languages can be aligned based on timestamps using the command below. Successfully aligned subtitles will appear at the same line number in their respective output files.
 
 Example:
 
