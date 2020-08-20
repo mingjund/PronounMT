@@ -37,6 +37,13 @@ python src/script-sub_align.py \
     --ep_delimiter '\n\n\n\n\n１　.*\n\n\n\n\n\n' \              # regex delimiter betweeen episodes in script
     --scene_delimiter '\n\n\n\n\n[０-９0-9]*　.*\n\n\n\n\n\n' \  # regex delimiter betweeen scenes in script
     --window_k 30 \                                             # size of window: look for next matching sentence within +/- window_k number of sentences
-    --tri_thres 0.4 \                                           # minimum proportion of trigram token matches between script and sub
-    --bi_thres 0.5                                              # minimum proportion of bigram token matches between script and sub
+    --tri_thres 0.4 \                                           # min proportion of trigram token matches between script and sub
+    --bi_thres 0.5                                              # min proportion of bigram token matches between script and sub
+```
+
+Files in `subs` and `foreign_subs` should be named *aligned_ep1.ass*, *aligned_ep2.ass*, *aligned_ep3.ass*...
+
+The script-sub alignment outout file should be in the format of:
+```
+([episode], [scene]) | [script line] | [sub line] | [foreign_sub line]
 ```

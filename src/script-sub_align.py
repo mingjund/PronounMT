@@ -195,7 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('--drama_len', type=int, default=None)
     parser.add_argument('--ep_delimiter', type=str, default='\n\n\n\n\n第.*回\n\n\n\n\n\n')
     parser.add_argument('--scene_delimiter', type=str, default='■')
-    parser.add_argument('--window', type=int, default=10)
+    parser.add_argument('--window_k', type=int, default=10)
     parser.add_argument('--tri_thres', type=float, default=0.4)
     parser.add_argument('--bi_thres', type=float, default=0.5)
     args = parser.parse_args()  
@@ -221,12 +221,12 @@ if __name__ == '__main__':
         else:
             tgt_subs = ["" for sub in src_subs]
         episode = script[ep]
-        matched_script, sub_len = align_utterances(src_subs, tgt_subs, episode, args.window, args.tri_thres, args.bi_thres)
+        matched_script, sub_len = align_utterances(src_subs, tgt_subs, episode, args.window_k, args.tri_thres, args.bi_thres)
         matched_script, unmatched_subs = realign(matched_script, episode, args.tri_thres, args.bi_thres)
         total_subs += sub_len
         total_unmatched += unmatched_subs
 
-        with open('{}/speaker-sub_alignment_ep{}.txt'.format(args.output, ep+1), 'w') as f:
+        with open('{}/script-sub_alignment_ep{}.txt'.format(args.output, ep+1), 'w') as f:
             f.write('\n'.join(' | '.join([str(line[0])]+list(line[1:])) for line in matched_script))
 
 #%%     
