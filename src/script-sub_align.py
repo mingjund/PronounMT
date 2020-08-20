@@ -1,108 +1,239 @@
-import pysubs2
-import pickle
+#%%
+import os
 import re
+import pykakasi
+import jaconv
+import nltk
+import argparse
 from tqdm import tqdm
+from collections import Counter
 
 
-eng_folder = "../subs/Nigehaji/Nigehaji_en/"
-jap_folder = "../subs/Nigehaji/Nigehaji_ja/"
-out_folder = "../subs/Nigehaji/Nigehaji_aligned_jap_eng/"
-out_en_folder = "../subs/Nigehaji/en-ja_alignment/eng_txt/"
-out_jp_folder = "../subs/Nigehaji/en-ja_alignment/jp_txt/"
-ja_dia_style = ["Default"]
-eng_dia_style = ["Default", "Past"]
+kakasi = pykakasi.kakasi()
+kakasi.setMode('J', 'H')
+kakasi.setMode('K', 'H')
+conv = kakasi.getConverter()
 
 
-def process_file(path_jp, path_eng, outpath):
-    eng_sub_raw = pysubs2.load(eng_folder + path_eng)
-    jap_subs_raw = pysubs2.load(jap_folder + path_jp)
+def load_script(drama):
+    with open(drama.script, 'r') as f:
+        script_by_ep = re.split('(?={})'.format(drama.ep_delimiter), f.read())[1:]
+
+    script_by_scene = [re.split('(?={})'.format(drama.scene_delimiter), ep) for ep in script_by_ep]
+    script_by_turn = []
+
+    for ep in script_by_scene:
+        scenes = []
+        for scene in ep:
+            scene_title = re.findall(r'^(.*?)\n', scene)
+            turns = [tuple(turn.split('「')) for turn in re.findall(r'(.*?「.*?)」', scene)]
+            if turns != []:
+                scenes.append((scene_title[0], turns))
+        if scenes != []:
+            script_by_turn.append(scenes)
+
+    return script_by_turn
 
 
-    eng_pointer = 0
-    jap_pointer = 0
+def load_subs(path):
+    with open(path, 'r') as f:
+        subs = f.read().split('\n')
+    return subs
 
-    eng_subs = []
-    jap_subs = []
 
-    for sub in eng_sub_raw:
-        if (sub.type == "Dialogue" and sub.style in eng_dia_style):
-            sub.text = re.sub(r'\{.*?\}', '', sub.text)
-            sub.text = re.sub(r'\\N', ' ', sub.text)
-            eng_subs.append(sub)
+def normalize_ja(text):
+    text = jaconv.h2z(text,ascii=True, digit=True)
+    text = conv.do(text)
+    text = jaconv.normalize(text)
+    text = re.sub(r'[.…｡。!！、\u3000　 ]|\\N|[\（\(].*?[\）\)]', '', text)
+    if len(text) < 3:
+        text = ' '+text+' '
+    return text
 
-    for sub in jap_subs_raw:
-        if (sub.type == "Dialogue" and sub.style in ja_dia_style):
-            sub.text = re.sub(r'\（.*?\）', '', sub.text)
-            sub.text = re.sub(r'\\N', ' ', sub.text)
-            jap_subs.append(sub)
-    print("File1: %s, file2: %s, outpath: %s" %(path_jp, path_eng, outpath))
-    print("num eng subs ", len(eng_subs))
-    print("num jap subs ", len(jap_subs))
 
-    # for each line of japanese text, match one or more english text
-    unmatched_jap = list(range(len(jap_subs)))
-    unmatched_eng = list(range(len(eng_subs)))
-    match_dict = dict()
-    for i in range(len(unmatched_jap)):
-        jap_sub = jap_subs[i]
-        aligned_eng = []
+def get_ngrams(text, n):
+    ngrams = list(nltk.ngrams(text, n))
+    return dict(Counter(ngrams)), len(ngrams)
 
-        for j in range(len(unmatched_eng)):
-            eng_num = unmatched_eng[j]
-            eng_sub = eng_subs[eng_num]
-            if (eng_sub.start > jap_sub.end):
-                break
-            if (eng_sub.start > jap_sub.start - 1000 and \
-                eng_sub.end < jap_sub.end + 1000):
-                aligned_eng.append(eng_num)
+
+def search_window(sub, episode, prev_turn_no, jump, unmatched, search_range, tri_thres, bi_thres):
+    best_count = 0
+    best_turn = ('', '')
+    turn_no = None
+    sub_text = normalize_ja(sub)
+    #sub_trigrams, sub_trigrams_len = get_ngrams(sub_text, 3)
+    sub_trigrams, sub_trigrams_len = get_ngrams(sub_text, 3)
+    sub_bigrams, sub_bigrams_len = get_ngrams(sub_text, 2)
+
+    if sub_trigrams_len == 0:
+        unmatched += 1
+    else:
+        for i in range(*search_range):
+            scene = episode[i]
+            for j in range(len(scene[1])):
+                turn = scene[1][j]
+                script_text = normalize_ja(turn[1])
+                script_trigrams, script_trigrams_len = get_ngrams(script_text, 3)
+                tri_count = 0
+                for trigram in sub_trigrams:
+                    tri_count += min(sub_trigrams[trigram], script_trigrams.get(trigram, 0))
+                if tri_count > best_count:
+                    best_count = tri_count
+                    best_turn = turn
+                    turn_no = (i,j)
+        if best_count/sub_trigrams_len < tri_thres:
+            # print('bi', best_count/sub_trigrams_len, sub + ' | '+ best_turn[1])
+            # unmatched += 1
+            # best_turn = ('', '')
+            # turn_no = None
+        #else:
+            bi_count = 0
+            script_bigrams, _ = get_ngrams(normalize_ja(best_turn[1]), 2)
+            for bigram in sub_bigrams:
+                bi_count += min(sub_bigrams[bigram], script_bigrams.get(bigram, 0))
+            if bi_count/sub_bigrams_len < bi_thres:
+                #print('uni', bi_count/sub_bigrams_len, sub + ' | '+ best_turn[1])
+                unmatched += 1
+                best_turn = ('', '')
+                turn_no = None
+            #else:
+                #if turn_no[0] > prev_turn_no[0]:
+        if turn_no != None:
+            # if previously no jump, jump is allowed
+            if jump == 0:
+                jump = turn_no[0] - prev_turn_no[0]
+            # previously jumped and now must return
+            else:
+                jump = 0
+
+            prev_turn_no = turn_no
+            # print('tri', best_count/sub_trigrams_len, sub + ' | '+ best_turn[1])
+            # if best_count/sub_trigrams_len < tri_thres:
+            #     print('bi', bi_count/sub_bigrams_len, sub + ' | '+ best_turn[1])
+
+    return turn_no, best_turn, prev_turn_no, jump, unmatched
+
+
+def align_utterances(src_subs, tgt_subs, episode, window, tri_thres, bi_thres):
+    matched_script = []
+    unmatched = 0
+    prev_turn_no = (0, 0)
+    script_len = len(episode)
+    sub_len = 0
+    jump = 0
+    for ja_sub, en_sub in zip(src_subs, tgt_subs):
+        if len(ja_sub) > 0: 
+            #print(jump)
+            search_range = (max(prev_turn_no[0]-window-jump, 0), 
+                            min(prev_turn_no[0]+window+1-jump, script_len))
+            #print(prev_turn_no[0], search_range)
+            turn_no, best_turn, prev_turn_no, jump, unmatched = \
+                search_window(ja_sub, episode, prev_turn_no, 0, unmatched, search_range, tri_thres, bi_thres)
+            matched_script.append((turn_no, best_turn[0], best_turn[1], ja_sub, en_sub))
+            #print((turn_no, best_turn[0], best_turn[1], ja_sub, en_sub))
+            sub_len += 1
+        # else:
+        #     matched_script.append((None, '', '', ja_sub, en_sub))
+    print('unmatched', unmatched/sub_len)
+    # for i in matched_script:
+    #     print(i)
+    return matched_script, sub_len
+
+
+def realign(matched_script, episode, tri_thres, bi_thres):
+    unmatched = 0
+    prev_turn_no = (0,0)
+    last_sub = len(matched_script) - 1
+    last_scene = len(episode) - 1
+
+    for i in range(len(matched_script)):
+        scene_no = None if matched_script[i][0] == None else matched_script[i][0][0]
+        prev_scene_no = 0
+        next_scene_no = last_scene
+
+        if i > 0:
+            k = 1
+            while matched_script[i-k][0] == None and i > k:
+                k += 1     
+            if matched_script[i-k][0] != None:   
+                prev_scene_no = matched_script[i-k][0][0]
+
+        if i < last_sub:
+            l = 1
+            while i+l < last_sub and (matched_script[i+l][0] == None or \
+                matched_script[i+l][0][0] < prev_scene_no):
+                l += 1
+            if matched_script[i+l][0] != None:
+                next_scene_no = matched_script[i+l][0][0]
+        #print(prev_scene_no, scene_no, next_scene_no)
+        if scene_no == None or scene_no < prev_scene_no or scene_no > next_scene_no: 
+            ja_sub = matched_script[i][3]
+            search_range = prev_scene_no, next_scene_no+1
+            turn_no, best_turn, prev_turn_no, _, _ = \
+                search_window(ja_sub, episode, prev_turn_no, 0, 0, search_range, tri_thres, bi_thres)
+            #print('prev', matched_script[i])
+            if turn_no != None:
+                matched_script[i] = (turn_no, best_turn[0], best_turn[1], ja_sub, matched_script[i][4])
+            # else:
+            #     matched_script[i] = (None, '', '', ja_sub, matched_script[i][4])
+            #print('curr', matched_script[i])
+
+        #print(matched_script[i])
+        unmatched += 1 if matched_script[i][0] == None else 0
         
-        if (len(aligned_eng) != 0):
-            match_dict[i] = aligned_eng
-        for j in aligned_eng:
-            unmatched_eng.remove(j)
+    print('realigned unmatched:', unmatched/(last_sub+1))
+    return matched_script, unmatched
+
+
+#%%   
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()   
+    parser.add_argument('--script', type=str, default=None)
+    parser.add_argument('--subs', type=str, default=None)
+    parser.add_argument('--foreign_subs', type=str, default=None)
+    parser.add_argument('--output', type=str, default=None) 
+    parser.add_argument('--drama_len', type=int, default=None)
+    parser.add_argument('--ep_delimiter', type=str, default='\n\n\n\n\n第.*回\n\n\n\n\n\n')
+    parser.add_argument('--scene_delimiter', type=str, default='■')
+    parser.add_argument('--window', type=int, default=10)
+    parser.add_argument('--tri_thres', type=float, default=0.4)
+    parser.add_argument('--bi_thres', type=float, default=0.5)
+    args = parser.parse_args()  
+
+    total_unmatched = 0
+    total_subs = 0
+
+    print('Aligning', args.script, args.subs)
+    script = load_script(args)
+    unmatched_subs = 0 
+
+    if not os.path.isdir(args.output):
+        os.mkdir(args.output)
     
-    all_ja = open(out_jp_folder + outpath + "_jp.txt", "w", encoding='utf-8')
-    all_eng = open(out_en_folder + outpath + "_en.txt", "w", encoding='utf-8')
-    #eng_matched_subs = pysubs2.load("blank.ass")
-    linecount = 0
-    for i in range(len(jap_subs)):
-        if (not i in match_dict):
-            all_ja.write(jap_subs[i].text + "\n")
-            all_eng.write("\n")
-            continue
+    for ep in tqdm(range(args.drama_len)):
+        src_sub_path = '{}/aligned_ep{}.txt'.format(args.subs, ep+1)
+        src_subs = load_subs(src_sub_path)
+
+        if args.foreign_subs != None:
+            tgt_sub_path = '{}/aligned_ep{}.txt'.format(args.foreign_subs, ep+1)
+            tgt_subs = load_subs(tgt_sub_path)
+            assert(len(src_subs) == len(tgt_subs)), "subs and foreign_subs ep{} have different lengths".format(ep+1)
         else:
-            eng_sub = eng_subs[match_dict[i][0]]
-            if (len(match_dict[i]) > 1):
-                for j in match_dict[i][1:]:
-                    new_sub = eng_subs[j]
-                    if (new_sub.end > eng_sub.end):
-                        eng_sub.end = new_sub.end
-                    eng_sub.text = eng_sub.text + " " + new_sub.text
+            tgt_subs = ["" for sub in src_subs]
+        episode = script[ep]
+        matched_script, sub_len = align_utterances(src_subs, tgt_subs, episode, args.window, args.tri_thres, args.bi_thres)
+        matched_script, unmatched_subs = realign(matched_script, episode, args.tri_thres, args.bi_thres)
+        total_subs += sub_len
+        total_unmatched += unmatched_subs
 
-            #eng_matched_subs.insert(linecount, jap_subs[i])
-            #eng_matched_subs.insert(linecount+1, eng_sub)
-            linecount += 2
-            all_ja.write(jap_subs[i].text + "\n")
-            out_en = eng_sub.text.replace("\n", " ")
-            all_eng.write(out_en + "\n")
-    all_ja.close()
-    all_eng.close()
-        
-    #eng_matched_subs.save(out_folder + outpath+"_jap_eng.ass")
-    return linecount/2
-    
+        with open('{}/speaker-sub_alignment_ep{}.txt'.format(args.output, ep+1), 'w') as f:
+            f.write('\n'.join(' | '.join([str(line[0])]+list(line[1:])) for line in matched_script))
 
-#ja_allfilenames = open("ja_filenames.txt", "r").readlines()
-total_lines = 0
-for i in tqdm(range(1, 12)):
-    jap_filename = "Nigehaji_ja_ep{}.ass".format(i)
-    eng_filename = "Nigeru wa Haji da ga Yaku ni Tatsu ep{:0>2d} (848x480 x264).ass".format(i)
-    print("jp filename: %s, eng_filename: %s" %(jap_filename, eng_filename))
-    out_filename = "Nigehaji_aligned_{:0>3d}".format(i)
-    total_lines += process_file(jap_filename, eng_filename, out_filename)
+#%%     
+        print("sub count:", sub_len)
+        print("matched subs:", sub_len - unmatched_subs)
 
-print(total_lines)
-
-
-
-
+    print(args.script, args.subs)
+    print("total sub count:", total_subs)
+    print("total matched subs:", total_subs - total_unmatched)
+    print('total unmatch rate:', total_unmatched/total_subs)

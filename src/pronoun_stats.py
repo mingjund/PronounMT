@@ -11,12 +11,12 @@ en_pro = {'i', 'my', 'me', 'mine', 'myself',
                 'they', 'them', 'their', 'theirs', 'themself', 'themselves',
                 'it', 'its', 'itself'}
 
-ja_pro = {'私', 'わたし', 'ワタシ', '私達', '僕', 'ぼく',
-                'ボク', '僕ら', '俺', 'おれ', 'オレ', '俺ら',
-                'あなた', 'あなた達', '貴方', 'あんた','貴様', '手前',
-                'お前', 'おまえ','お前ら','君','きみ','キミ','君たち', '君たち',
+ja_pro = {'私', 'わたし', 'ワタシ', '私達', '私たち', '僕', 'ぼく', '自分', 
+                'ボク', '僕ら', '僕たち', 'ぼくたち', '俺', 'おれ', 'オレ', '俺ら', '俺たち', 'おれたち',
+                'あなた', 'あなた達', 'あなたたち', '貴方', 'あんた','貴様', '手前',
+                'お前', 'おまえ','お前ら','君','きみ','キミ','君達', '君たち',
                 '彼', 'かれ', 'カレ', '彼ら',
-                '彼女', 'かのじょ', 'カノジョ', '彼女たち', '彼女達'}
+                '彼女', 'かのじょ', 'カノジョ', 'かのじょたち', '彼女たち', '彼女達'}
 
 zh_pro = {'我', '我们', '咱', '咱们',
           '你', '你们',
@@ -25,10 +25,12 @@ zh_pro = {'我', '我们', '咱', '咱们',
 nlp = spacy.load("en_core_web_sm")
 
 #pronoun frequency by language
-def frequency(file, size):
+def frequency(file):
     with open(file, 'r') as f:
-        pro_list = ja_pro if file.split('.')[-1] == 'ja' else en_pro
-        tokens = f.read().split()
+        pro_list = ja_pro if file.endswith('.ja') else en_pro
+        text = f.read().lower()
+        size = len(text.split('\n'))
+        tokens = text.split()
         total = 0
         stats = [file]
         for pro in pro_list:
@@ -39,7 +41,7 @@ def frequency(file, size):
         #     if token in pro_list:
         #         count += 1
         stats.append('average no. of pronouns per sentence:'+str(total/size))
-
+    
     with open(file+'.freq', 'w') as freq:
         freq.write('\n'.join(stats))
 
@@ -236,7 +238,8 @@ if __name__ == "__main__":
     #print('full_sent:\n', cls_report('../split/test.pronword.en', 'full_sent/test_65000.full_sent.pronword.out.en'))
     #print('pron_only:\n', cls_report('../split/test.pronword.en', 'pron_only/test_65000.out.en'))
     #print(sys.argv[2])
-    pron_eval(sys.argv[1], sys.argv[2])
+    #pron_eval(sys.argv[1], sys.argv[2])
     #print(cls_report(sys.argv[1], sys.argv[2]))
 #'../../dialog_corpus/en-ja/data/test.turn'
 #'../../dialog_corpus/en-ja_turns/vocab_8000_HAN_base/dialog_acc_87.80_ppl_1.40_e3.out.turn'
+    frequency(sys.argv[1])

@@ -1,30 +1,39 @@
 import os
 import sys
+from collections import defaultdict
 
-def docs2corpus(input_dir,  output_prefix, src_ext, tgt_ext):
-    src_texts = []
-    tgt_texts = []
-    docs = ['0']
+def docs2corpus(input_dir,  output_dir, src_ext, tgt_ext):
+    src_sents = defaultdict(list)
+    tgt_sents = defaultdict(list)
+    doc_boundaries = defaultdict(list)
 
-    for filename in os.listdir(input_dir):
-        if filename.endswith(".np.tk.qb.es.zh") :
+    splits = ['dev', 'test', 'train']
+    idx = 0
+
+    for filename in os.listdir(input_dir)[::-1]:
+        if filename.endswith(src_ext) :
             with open(input_dir+filename, 'r') as raw_src, \
-                open(input_dir+filename.replace(".np.tk.qb.es.zh", ".qb.np.tk.lc.en"), 'r') as raw_tgt:
+                open(input_dir+filename.replace(src_ext, tgt_ext), 'r') as raw_tgt:
 
                 src_doc = raw_src.read().strip().split('\n')
                 tgt_doc = raw_tgt.read().strip().split('\n')
 
                 assert(len(src_doc) == len(tgt_doc))
 
-                src_texts += src_doc              
-                tgt_texts += tgt_doc
-                docs.append(str(len(tgt_texts)))
+                doc_boundaries[splits[idx]].append(str(len(tgt_sents[splits[idx]])))
+                src_sents[splits[idx]] += src_doc              
+                tgt_sents[splits[idx]] += tgt_doc
 
-    with open(output_prefix+'.'+src_ext, 'w') as src_all,\
-        open(output_prefix+'.'+tgt_ext, 'w') as tgt_all,\
-        open(output_prefix+'.docs', 'w') as docs_all:
-        src_all.write('\n'.join(src_texts))
-        tgt_all.write('\n'.join(tgt_texts))
-        docs_all.write('\n'.join(docs))
+                if splits[idx] != 'train' and len(tgt_sents[splits[idx]]) > 2000:
+                    idx += 1
+
+
+    for split in splits:
+        with open(output_dir+split+'.'+src_ext, 'w') as src_out,\
+            open(output_dir+split+'.'+tgt_ext, 'w') as tgt_out,\
+            open(output_dir+split+'.docs', 'w') as docs_out:
+            src_out.write('\n'.join(src_sents[split]))
+            tgt_out.write('\n'.join(tgt_sents[split]))
+            docs_out.write('\n'.join(doc_boundaries[split]))
 
 docs2corpus(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
