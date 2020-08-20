@@ -1,7 +1,7 @@
 # Improving Pronoun Translation for Prodrop Languages
 
 ## Script-Sub-Sub Alignment for Speaker Labeling
-This repo provides code for aligning subtitles in the `.ass` format of two different languages based on timestamps - **sub-sub alignment** and aligning scripts to subtitles for multiple episodes of TV series - **script-sub alignment**.
+This repo provides code for aligning subtitles of any two languages in the `.ass` format based on timestamps - **sub-sub alignment** and aligning scripts to subtitles for multiple episodes of TV series - **script-sub alignment**.
 
 Required Python libraries: `pysubs2`, `pykakasi`, `jaconv`, `nltk`.
 
@@ -12,27 +12,27 @@ Example:
 
 ```
 python src/sub-sub_align.py \
-    --src_subs Nigehaji_en \        # source language subtitle dir 
-    --tgt_subs Nigehaji_ja \        # target language subtitle dir
-    --drama_len 11 \                # total number of episodes (number of subtitle files per language)
-    --src_out test_en_aligned \     # aligned src_subs output dir
-    --tgt_out test_ja_aligned \     # aligned tgt_subs output dir
-    --src_sub_style Default,Past \  # src_sub subtitle style(s) 
-    --tgt_sub_style Default         # tgt_sub subtitle style(s) 
+    --src_subs Nigehaji_raw_en \        # source language subtitle dir 
+    --tgt_subs Nigehaji_raw_ja \        # target language subtitle dir
+    --drama_len 11 \                    # total number of episodes (number of subtitle files per language)
+    --src_out Nigehaji_aligned_en \     # aligned src_subs output dir
+    --tgt_out Nigehaji_aligned_ja \     # aligned tgt_subs output dir
+    --src_sub_style Default,Past \      # src_sub subtitle style(s) 
+    --tgt_sub_style Default             # tgt_sub subtitle style(s) 
 ```
 
 Files in `src_subs` and `tgt_subs` should be named *raw_ep1.ass*, *raw_ep2.ass*, *raw_ep3.ass*...
 
 ### Script-Sub Alignment
-The script of a full TV series can be aligned to the subtitles of each episide using the command below.
+The script (Japanese) of a full TV series can be aligned to the subtitles (Japanese) of each episide using the command below.
 
 Example:
 ```
 python src/script-sub_align.py \
-    --script Nigehaji-script.txt \                              # path to script file
-    --subs test_ja_aligned \                                    # subtitles dir
-    --foreign_subs test_en_aligned \                            # foreign language subtitles dir (optional)
-    --output test_alignment \                                   # alignment output dir
+    --script Nigehaji-script.txt \                              # path to Japanese script file
+    --subs Nigehaji_aligned_ja \                                # Japanese subtitles dir
+    --foreign_subs Nigehaji_aligned_en \                        # foreign language subtitles dir (optional)
+    --output Nigehaji_script-sub_aligned \                      # alignment output dir
     --drama_len 11 \                                            # total number of episodes   
     --ep_delimiter '\n\n\n\n\n１　.*\n\n\n\n\n\n' \              # regex delimiter betweeen episodes in script
     --scene_delimiter '\n\n\n\n\n[０-９0-9]*　.*\n\n\n\n\n\n' \  # regex delimiter betweeen scenes in script
@@ -41,7 +41,7 @@ python src/script-sub_align.py \
     --bi_thres 0.5                                              # min proportion of bigram token matches between script and sub
 ```
 
-Files in `subs` and `foreign_subs` should be named *aligned_ep1.ass*, *aligned_ep2.ass*, *aligned_ep3.ass*...
+Files in `subs` and `foreign_subs` should be named *aligned_ep1.txt*, *aligned_ep2.txt*, *aligned_ep3.txt*...
 
 The script-sub alignment outout file should be in the format of:
 ```

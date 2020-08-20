@@ -110,8 +110,8 @@ if __name__ == '__main__':
     #ja_allfilenames = open("ja_filenames.txt", "r").readlines()
     total_lines = 0
     for i in tqdm(range(1, args.drama_len+1)):
-        src_filename = "Nigeru wa Haji da ga Yaku ni Tatsu ep{:0>2d} (848x480 x264).ass".format(i)
-        tgt_filename = "Nigehaji_ja_ep{}.ass".format(i)
+        src_filename = "raw_ep{}.ass".format(i)
+        tgt_filename = "raw_ep{}.ass".format(i)
         print("src_filename: {}, tgt_filename: {}".format(src_filename, tgt_filename))
         out_filename = "aligned_ep{}.txt".format(i)
         total_lines += process_file(src_filename, tgt_filename, out_filename, args)
