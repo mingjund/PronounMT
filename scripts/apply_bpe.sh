@@ -1,5 +1,5 @@
 # Apply BPE
-for split in back_trans_e22_train.out #train dev test
+for split in train dev test
 do
     for l in $3 $4
     do
